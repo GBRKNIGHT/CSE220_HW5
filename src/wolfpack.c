@@ -1,3 +1,13 @@
+
+
+/**
+ * Name: Yichen Li
+ * SBU_ID: 112946979
+ * CSE_220_R01
+ * 
+*/
+
+
 #include <ctype.h>
 #include <string.h>
 #include <stdio.h>
@@ -8,6 +18,13 @@
 #include <assert.h>
 
 #include "wolfpack.h"
+
+
+void get_source_address(const unsigned char *packet){
+    unsigned char* p = packet;
+    printf("%#02x\n", p);
+    
+}
 
 void print_packet_sf(const unsigned char *packet) {
 }
