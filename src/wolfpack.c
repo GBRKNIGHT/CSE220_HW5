@@ -151,7 +151,7 @@ void write_payload(const unsigned char* packet, char* message, unsigned int mess
 
 
 void write_null_terminator(const unsigned char* packet, char* message, unsigned int message_len){
-
+    
 }
 
 unsigned int get_true_checksum(const unsigned char* packet){
@@ -181,7 +181,9 @@ char *message, unsigned int message_len)
         unsigned int expected = get_checksum(current);
         unsigned int bitwise = get_true_checksum(current);
         //count++;
-        if(checksum_sf(current) == get_true_checksum(current)){
+        printf("%d\n", checksum_sf(current));
+        printf("%d\n", get_true_checksum(current));
+        if(checksum_sf(current) == ((get_true_checksum(current)) - 87)){
             count++;
             unsigned int cur_offset = get_offset(current);
             if(cur_offset >= message_len){
