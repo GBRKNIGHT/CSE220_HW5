@@ -20,6 +20,8 @@
 #include "wolfpack.h"
 
 
+const int MAX_SIZE = ((0x1 << 24 ) - 1 ) - 24;
+
 // General print function to print data fields, e.g. source address, destination address...
 void print_bytes(const unsigned char *packet, int start, int length){
     unsigned char* p = (unsigned char*)packet + start;
@@ -80,9 +82,25 @@ void print_to_end(const unsigned char *packet, int start){
         p++;
     }
 
-
     printf("\n");
 }
+
+
+void set_payload(const unsigned char *packet, char* message, int length, 
+unsigned message_len, unsigned int offset)
+{
+    unsigned char* pointer = (unsigned char*)packet + 24;
+    int i = 0;
+    // length is payload length3
+    while(i < length && (offset + i) < message_len)
+    {
+        message[i] = *pointer;//get_int(packet, pointer, length);
+        pointer++;
+        //message++;
+        i++;
+    }
+}
+
 
 // Print function. 
 void print_packet_sf(const unsigned char *packet) {
@@ -110,7 +128,77 @@ unsigned int checksum_sf(const unsigned char *packet) {
     return checksum;
 }
 
-unsigned int reconstruct_sf(unsigned char *packets[], unsigned int packets_len, char *message, unsigned int message_len) {
-    return 0;
+
+// int check_checksum(const unsigned char *packet){
+//     unsigned int expected = checksum_sf(packet);
+//     unsigned int bitwise = get_int(packet, 20, 4);
+//     return (int)(expected == bitwise);
+// }
+
+
+unsigned int get_offset(const unsigned char *packet){
+    return get_int(packet, 12, 3);
+}
+
+int get_payload_length(const unsigned char* packet){
+    return get_total_length(packet) - 24;
+}
+
+void write_payload(const unsigned char* packet, char* message, unsigned int message_len){
+    int offset = get_offset(packet);
+    set_payload(packet, message, get_payload_length(packet), message_len, get_offset(packet));
+}
+
+
+void write_null_terminator(const unsigned char* packet, char* message, unsigned int message_len){
+
+}
+
+unsigned int get_true_checksum(const unsigned char* packet){
+    unsigned int result = 0;
+    for (int i = 0; i<4; i++){
+        result <<= 8;
+        result += packet[20+i];
+    }
+    return result;
+}
+
+
+
+
+unsigned int reconstruct_sf(unsigned char *packets[], unsigned int packets_len, 
+char *message, unsigned int message_len) 
+{
+    unsigned int last_packet_index = 0;
+    unsigned int last_offset = 0;
+    int count = 0;
+    //     unsigned int expected = checksum_sf(packet);
+//     unsigned int bitwise = get_int(packet, 20, 4);
+    for(unsigned int i = 0; i < packets_len; i++){
+        unsigned char *current = packets[i];
+        char* p = message;
+
+        unsigned int expected = get_checksum(current);
+        unsigned int bitwise = get_true_checksum(current);
+        //count++;
+        if(checksum_sf(current) == get_true_checksum(current)){
+            count++;
+            unsigned int cur_offset = get_offset(current);
+            if(cur_offset >= message_len){
+                continue;
+            }
+            p += cur_offset;
+            if (cur_offset > last_offset){
+                last_offset = cur_offset;
+                last_packet_index = i;
+            }
+            // write payload to message
+            //write_payload(current, p, message_len);
+            //count ++;
+        }
+    }
+    write_null_terminator(packets[last_packet_index], message, message_len);
+
+    return count;
 }
 
