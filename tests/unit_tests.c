@@ -15,7 +15,7 @@ int run_using_system(char *test_name) {
     char cmd[500];
     sprintf(test_log_outfile, "%s/%s.log", TEST_OUTPUT_DIR, test_name);
 #if defined(__linux__)
-    sprintf(cmd, "valgrind -s --leak-check=full --show-leak-kinds=all --track-origins=yes --trace-children=yes --error-exitcode=37 ./bin/%s > %s 2>&1",
+    sprintf(cmd, "ulimit -f 300; ulimit -t 5; valgrind -s --leak-check=full --show-leak-kinds=all --track-origins=yes --trace-children=yes --error-exitcode=37 ./bin/%s > %s 2>&1",
 	    test_name, test_log_outfile);
 #else
     cr_log_warn("Skipping valgrind tests. Run tests on Linux or GitHub for full output.\n");
@@ -31,7 +31,7 @@ int run_using_system_no_valgrind(char *test_name) {
 
     char cmd[500];
     sprintf(test_log_outfile, "%s/%s.log", TEST_OUTPUT_DIR, test_name);
-    sprintf(cmd, "./bin/%s > %s 2>&1", test_name, test_log_outfile);
+    sprintf(cmd, "ulimit -f 300; ulimit -t 5; ./bin/%s > %s 2>&1", test_name, test_log_outfile);
     return system(cmd);
 }
 
@@ -53,22 +53,32 @@ void expect_error_exit(int status) {
 
 void expect_no_valgrind_errors(int status) {
     cr_expect_neq(WEXITSTATUS(status), 37, "Valgrind reported errors -- see %s", test_log_outfile);
-    if (WEXITSTATUS(status) == 37) {
-        char cmd[200];
-        sprintf(cmd, "cat %s", test_log_outfile);
-        system(cmd);
-    }
 }
 
 void report_message(char *actual, char *expected) {
-cr_expect_arr_eq(actual, expected, strlen(expected)+1,
+    cr_expect_arr_eq(actual, expected, strlen(expected)+1,
             "Contents of message incorrect.\nActual:   %s\nExpected: %s", actual, expected);
+}
+
+void print_array(unsigned char array[], unsigned int array_len) {
+    for (unsigned int i = 0; i < array_len; i++) {
+        printf("%02x", array[i]);
+    }
+    printf("\n");
 }
 
 void report_packets(unsigned char *actual[], char *expected[], unsigned int *packet_lens_exp, unsigned int num_expected) {
     for (unsigned int i = 0; i < num_expected; i++) {
         cr_expect_arr_eq(actual[i], expected[i], packet_lens_exp[i], 
-            "Contents of packet #%d incorrect. See unit_tests.c for expected packet contents.", i);
+            "Contents of packet #%d incorrect. See unit_tests.c or grading_tests.c for expected packet contents.", i);
+        if (memcmp(actual[i], expected[i], packet_lens_exp[i]) != 0) {
+            //printf("%.*s\n", (int)get_field(packet, TOTAL_LENGTH_START, TOTAL_LENGTH_LEN)-HEADER_LEN, packet+PAYLOAD_START);
+            printf("Expected:\n");
+            print_array((unsigned char *)expected[i], packet_lens_exp[i]);
+            printf("Actual:\n");
+            print_array(actual[i], packet_lens_exp[i]);
+            
+        }
     }
 }
 
@@ -143,7 +153,7 @@ Test(base_return, reconstruct01, .description="Function given more than enough m
     report_return_value(num_packets_act, num_packets_exp);
     free(message_act);
 }
-Test(base_valgrind, reconstruct01_valgrind) {
+Test(base_valgrind, reconstruct01) {
     expect_no_valgrind_errors(run_using_system("reconstruct01"));
 }
 
@@ -197,7 +207,7 @@ Test(base_return, reconstruct02, .description="Function not given enough memory 
     report_return_value(num_packets_act, num_packets_exp);
     free(message_act);
 }
-Test(base_valgrind, reconstruct02_valgrind) {
+Test(base_valgrind, reconstruct02) {
     expect_no_valgrind_errors(run_using_system("reconstruct02"));
 }
 
@@ -249,7 +259,7 @@ Test(base_return, reconstruct03, .description="Function given more memory than n
     report_return_value(num_packets_act, num_packets_exp);
     free(message_act);
 }
-Test(base_valgrind, reconstruct03_valgrind) {
+Test(base_valgrind, reconstruct03) {
     expect_no_valgrind_errors(run_using_system("reconstruct03"));
 }
 
@@ -266,12 +276,13 @@ Test(base_output, reconstruct04, .description="First and last packets, and a mid
     };
     unsigned int packets_len = 8;
     unsigned int message_len = 120; // original message has 91 characters
-    char *message_act = malloc(message_len*sizeof(char));
+    char *message_act = malloc(message_len+1);
 
     // fill memory with "random" garbage
     srand(2513);
     for (unsigned int i = 0; i < message_len; i++)
         message_act[i] = '@';
+    message_act[message_len] = '\0';
 
     reconstruct_sf((unsigned char **)packets, packets_len, message_act, message_len);
     char *message_exp = "@@@@@@@@@@@@o ways to wr@@@@@@@@@@@@ee programs; only the third one works. - Alan J.";
@@ -292,19 +303,20 @@ Test(base_return, reconstruct04, .description="First and last packets, and a mid
     };
     unsigned int packets_len = 8;
     unsigned int message_len = 120; // original message has 91 characters
-    char *message_act = malloc(message_len*sizeof(char));
+    char *message_act = malloc(message_len+1);
 
     // fill memory with "random" garbage
     srand(2513);
     for (unsigned int i = 0; i < message_len; i++)
         message_act[i] = (char)(rand() % 200 + 33);
+    message_act[message_len] = '\0';
 
     unsigned int num_packets_act = reconstruct_sf((unsigned char **)packets, packets_len, message_act, message_len);
     unsigned int num_packets_exp = 5;
     cr_expect_eq(num_packets_act, num_packets_exp, "The return value was %d, but it should have been %d.\n", num_packets_act, num_packets_exp);
     free(message_act);
 }
-Test(base_valgrind, reconstruct04_valgrind) {
+Test(base_valgrind, reconstruct04) {
     expect_no_valgrind_errors(run_using_system("reconstruct04"));
 }
 
@@ -339,7 +351,7 @@ Test(base_return, packetize01, .description="Packetize a short message. packets[
     unsigned int num_packets_exp = 3;
     report_return_value(num_packets_act, num_packets_exp);
 }
-Test(base_valgrind, packetize01_valgrind) {
+Test(base_valgrind, packetize01) {
     expect_no_valgrind_errors(run_using_system("packetize01"));
 }
 
@@ -375,6 +387,6 @@ Test(base_return, packetize02, .description="Packetize a message that is too lar
     unsigned int num_packets_exp = 4;
     report_return_value(num_packets_act, num_packets_exp);
 }
-Test(base_valgrind, packetize02_valgrind) {
+Test(base_valgrind, packetize02) {
     expect_no_valgrind_errors(run_using_system("packetize02"));
 }
